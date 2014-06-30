@@ -17,15 +17,16 @@ def checkIndexPage ():
     return hashlib.md5 (remote_content).hexdigest () == r"39c014834553073ac72cde7a0912211b"
 
 def sendWarningEmail ():
-    import email
+    from email.mime.text import MIMEText
+    import smtplib
     
     sender = 'hyq@c3p-group.com'
-    recipients = ['hyq@c3p-group.com']
+    recipients = ['hyq@c3p-group.com', 'jzh@c3p-group.com', 'yxj@c3p-group.com']
 
-    msg = email.mime.text. MIMEText (u'HYQ: Xi-peng.com 主页已被修改', 'plain', 'utf-8')
-    msg['Subject'] = u'Xi-peng.com 主页已被修改'
+    msg = MIMEText ('HYQ: The xi-peng.com website had been hacked.')
+    msg['Subject'] = 'xi-peng.com website had been hacked.'
     msg['From'] = sender
-    msg['To'] = u', '.join (recipients)
+    msg['To'] = ', '.join (recipients)
     
     s = smtplib.SMTP ('localhost')
     s.sendmail (sender, recipients, msg.as_string ())
