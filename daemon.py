@@ -13,18 +13,19 @@ def getopts ():
     import getopt, sys
 
     try:
-        opts, args = getopt.getopt (sys.argv[1:], "h", ["help", "srcdir=", "ftpserver=", "ftpuser=", "ftppasswd="])
+        opts, args = getopt.getopt (sys.argv[1:], "h", ["help", "srcdir=", "ftpserver=", "ftpuser=", "ftppasswd=", "sendmail"])
     except getopt.GetoptError as err:
         # Print help information and exit:
         print str (err) # Will print something like "option -a not recognized."
-        usage ()
         sys.exit (2)
 
     sendmail = False
+    ftpserver = None
+    ftpuser = None
+    ftppasswd = None
     
     for opt, arg in opts:
         if opt in ("-h", "--help"):
-            usage ()
             sys.exit ()
         elif opt in ("--srcdir"):
             src_dir = arg
@@ -158,7 +159,7 @@ def main ():
     if sendmail:
         if not checkIndexPage (src_dir):
             sendWarningEmail ()
-    else
+    else:
         run (src_dir, ftpserver, ftpuser, ftppasswd)
 
 if __name__ == "__main__":
