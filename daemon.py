@@ -5,21 +5,54 @@ try:
     import urllib.request as urllib2
 except:
     import urllib2
+import ftplib
 import hashlib
+import os
 
-def checkIndexPage ():
-    import os
+def getopts ():
+    import getopt, sys
 
+    try:
+        opts, args = getopt.getopt (sys.argv[1:], "h", ["help", "srcdir=", "ftpserver=", "ftpuser=", "ftppasswd="])
+    except getopt.GetoptError as err:
+        # Print help information and exit:
+        print str (err) # Will print something like "option -a not recognized."
+        usage ()
+        sys.exit (2)
+
+    for opt, arg in opts:
+        if opt in ("-h", "--help"):
+            usage ()
+            sys.exit ()
+        elif opt in ("--srcdir"):
+            src_dir = arg
+        elif opt in ("--ftpserver"):
+            ftpserver  = arg
+        elif opt in ("--ftpuser"):
+            ftpuser = arg
+        elif opt in ("--ftppasswd"):
+            ftppasswd = arg
+        else:
+            assert False, "Unhandled option"
+
+    return (src_dir, ftpserver, ftpuser, ftppasswd)
+
+def checkIndexPage (src_dir):
     # Remote gets the index page
     index_html = urllib2.urlopen ("http://www.xi-peng.com/index.html")
     remote_content = index_html.read ()
 
-    return hashlib.md5 (remote_content).hexdigest () == r"39c014834553073ac72cde7a0912211b"
+    # Gets the local source index page
+    local_content = None
+    with open (os.path.join (src_dir, 'index.html'), mode='rb') as f:
+        local_content = f.read ()
+
+    return hashlib.md5 (remote_content).digest () == hashlib.md5 (local_content).digest ()
 
 def sendWarningEmail ():
     from email.mime.text import MIMEText
     import smtplib
-    
+
     sender = 'hyq@c3p-group.com'
     recipients = ['hyq@c3p-group.com', 'jzh@c3p-group.com', 'yxj@c3p-group.com']
 
@@ -27,15 +60,100 @@ def sendWarningEmail ():
     msg['Subject'] = 'xi-peng.com website had been hacked.'
     msg['From'] = sender
     msg['To'] = ', '.join (recipients)
-    
+
     s = smtplib.SMTP ('localhost')
     s.sendmail (sender, recipients, msg.as_string ())
     s.quit ()
 
+def syncSource (subdir, ftpdir, filename, ftpserver, ftpuser, ftppasswd):
+    # Gets the local source index page
+    local_content = None
+    with open (os.path.join (subdir, filename), mode='rb') as f:
+        local_content = f.read ()
+
+    class Reader:
+        def __init__ (self):
+            self.data = ''
+
+        def __call__ (self, data):
+            self.data = data
+
+    ftp = ftplib.FTP (ftpserver)
+    ftp.set_pasv (True)
+    ftp.login (ftpuser, ftppasswd)
+
+    ftp_reader = Reader ()
+    ftp.retrbinary ('RETR ' + ftpdir + '/' + filename, ftp_reader)
+
+    if hashlib.md5 (local_content).digest () != hashlib.md5 (ftp_reader.data).digest ():
+        print 'Fixing %s' % (ftpdir + '/' + filename)
+
+        with open (os.path.join (subdir, filename), mode='rb') as f:
+            ftp.storbinary ('STOR ' + ftpdir + '/' + filename, f)
+        
+    ftp.close ()
+
+def ftpRemove (ftp, filename):
+    try:
+        ftp.delete (filename)
+    except Exception:
+        pwd_saved = ftp.pwd ()
+        ftp.cwd (filename)
+
+        for f in ftp.nlst ():
+            ftpRemove (ftp, f)
+
+        ftp.rmd (pwd_saved + '/' + filename)
+        ftp.cwd (pwd_saved)
+
+def uploadWebSource (src_dir, ftpserver, ftpuser, ftppasswd):
+    for subdir, dirs, files in os.walk (src_dir):
+        relpath = os.path.relpath (subdir, src_dir).replace ('\\', '/')
+
+        if relpath == '.':
+            ftpdir = '/www'
+        else:
+            ftpdir = '/www/' + relpath
+ 
+        for filename in files:
+            do_continue = True
+            while do_continue:
+                try:
+                    syncSource (subdir, ftpdir, filename, ftpserver, ftpuser, ftppasswd)
+                    do_continue = False
+                except:
+                    pass
+
+        do_continue = True
+        while do_continue:
+            try:
+                ftp = ftplib.FTP (ftpserver)
+                ftp.set_pasv (True)
+                ftp.login (ftpuser, ftppasswd)
+
+                ftp.cwd (ftpdir)
+
+                remote_files = ftp.nlst ()
+                for remote_filename in remote_files:
+                    if (not remote_filename in files) and (not remote_filename in dirs):
+                        print 'Removing ' + remote_filename
+                        ftpRemove (ftp, remote_filename)
+                        
+                ftp.close ()
+
+                do_continue = False
+            except:
+                pass
+
+def run (src_dir, ftpserver, ftpuser, ftppasswd):
+    if not checkIndexPage (src_dir):
+        uploadWebSource (src_dir, ftpserver, ftpuser, ftppasswd)
+
 def main ():
-    if not checkIndexPage ():
-        sendWarningEmail ()
+    src_dir, ftpserver, ftpuser, ftppasswd = getopts ()
+    run (src_dir, ftpserver, ftpuser, ftppasswd)
 
 if __name__ == "__main__":
     main ()
 
+# vim: softtabstop=4 shiftwidth=4 expandtab
