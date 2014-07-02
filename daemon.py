@@ -20,6 +20,8 @@ def getopts ():
         usage ()
         sys.exit (2)
 
+    sendmail = False
+    
     for opt, arg in opts:
         if opt in ("-h", "--help"):
             usage ()
@@ -32,10 +34,12 @@ def getopts ():
             ftpuser = arg
         elif opt in ("--ftppasswd"):
             ftppasswd = arg
+        elif opt in ("--sendmail"):
+            sendmail = True
         else:
             assert False, "Unhandled option"
 
-    return (src_dir, ftpserver, ftpuser, ftppasswd)
+    return (src_dir, ftpserver, ftpuser, ftppasswd, sendmail)
 
 def checkIndexPage (src_dir):
     # Remote gets the index page
@@ -150,8 +154,12 @@ def run (src_dir, ftpserver, ftpuser, ftppasswd):
         uploadWebSource (src_dir, ftpserver, ftpuser, ftppasswd)
 
 def main ():
-    src_dir, ftpserver, ftpuser, ftppasswd = getopts ()
-    run (src_dir, ftpserver, ftpuser, ftppasswd)
+    src_dir, ftpserver, ftpuser, ftppasswd, sendmail = getopts ()
+    if sendmail:
+        if not checkIndexPage (src_dir):
+            sendWarningEmail ()
+    else
+        run (src_dir, ftpserver, ftpuser, ftppasswd)
 
 if __name__ == "__main__":
     main ()
