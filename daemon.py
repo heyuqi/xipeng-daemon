@@ -9,6 +9,8 @@ import ftplib
 import hashlib
 import os
 
+RETRY_TIMES = 10
+
 def getopts ():
     import getopt, sys
 
@@ -83,12 +85,15 @@ def syncSource (subdir, ftpdir, filename, ftpserver, ftpuser, ftppasswd):
         def __call__ (self, data):
             self.data = data
 
-    ftp = ftplib.FTP (ftpserver)
-    ftp.set_pasv (True)
-    ftp.login (ftpuser, ftppasswd)
-
     ftp_reader = Reader ()
-    ftp.retrbinary ('RETR ' + ftpdir + '/' + filename, ftp_reader)
+    try:
+        ftp = ftplib.FTP (ftpserver)
+        ftp.set_pasv (True)
+        ftp.login (ftpuser, ftppasswd)
+
+        ftp.retrbinary ('RETR ' + ftpdir + '/' + filename, ftp_reader)
+    except:
+        pass
 
     if hashlib.md5 (local_content).digest () != hashlib.md5 (ftp_reader.data).digest ():
         print 'Fixing %s' % (ftpdir + '/' + filename)
@@ -121,16 +126,14 @@ def uploadWebSource (src_dir, ftpserver, ftpuser, ftppasswd):
             ftpdir = '/www/' + relpath
  
         for filename in files:
-            do_continue = True
-            while do_continue:
+            for x in range (RETRY_TIMES):
                 try:
                     syncSource (subdir, ftpdir, filename, ftpserver, ftpuser, ftppasswd)
-                    do_continue = False
+                    break
                 except:
                     pass
 
-        do_continue = True
-        while do_continue:
+        for x in range (RETRY_TIMES):
             try:
                 ftp = ftplib.FTP (ftpserver)
                 ftp.set_pasv (True)
@@ -146,7 +149,7 @@ def uploadWebSource (src_dir, ftpserver, ftpuser, ftppasswd):
                         
                 ftp.close ()
 
-                do_continue = False
+                break
             except:
                 pass
 
