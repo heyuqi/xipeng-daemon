@@ -7,9 +7,11 @@ except:
     import urllib2
 import ftplib
 import hashlib
+import tempfile
 import os
 
 RETRY_TIMES = 10
+verbose = False
 
 def getopts ():
     import getopt, sys
@@ -25,7 +27,7 @@ def getopts ():
     ftpserver = None
     ftpuser = None
     ftppasswd = None
-    
+
     for opt, arg in opts:
         if opt in ("-h", "--help"):
             sys.exit ()
@@ -73,34 +75,38 @@ def sendWarningEmail ():
     s.quit ()
 
 def syncSource (subdir, ftpdir, filename, ftpserver, ftpuser, ftppasswd):
+    if verbose:
+        print ftpdir + '/' + filename
+
     # Gets the local source index page
     local_content = None
     with open (os.path.join (subdir, filename), mode='rb') as f:
-        local_content = f.read ()
+        local_content = f.read ().replace('\r\n', '\n')
 
-    class Reader:
-        def __init__ (self):
-            self.data = ''
-
-        def __call__ (self, data):
-            self.data = data
-
-    ftp_reader = Reader ()
+    remote_content = None
     try:
         ftp = ftplib.FTP (ftpserver)
         ftp.set_pasv (True)
         ftp.login (ftpuser, ftppasswd)
 
-        ftp.retrbinary ('RETR ' + ftpdir + '/' + filename, ftp_reader)
+        fw = tempfile.NamedTemporaryFile (mode='wb', delete=False)
+        ftp.retrbinary ('RETR ' + ftpdir + '/' + filename, fw.write)
+        fw.close ()
+
+        with open (fw.name, mode='rb') as fr:
+            remote_content = fr.read ().replace('\r\n', '\n')
+
+        if os.path.exists (fw.name):
+            os.remove (fw.name)
     except:
         pass
 
-    if hashlib.md5 (local_content).digest () != hashlib.md5 (ftp_reader.data).digest ():
+    if hashlib.md5 (local_content).digest () != hashlib.md5 (remote_content).digest ():
         print 'Fixing %s' % (ftpdir + '/' + filename)
 
         with open (os.path.join (subdir, filename), mode='rb') as f:
             ftp.storbinary ('STOR ' + ftpdir + '/' + filename, f)
-        
+
     ftp.close ()
 
 def ftpRemove (ftp, filename):
@@ -124,7 +130,7 @@ def uploadWebSource (src_dir, ftpserver, ftpuser, ftppasswd):
             ftpdir = '/www'
         else:
             ftpdir = '/www/' + relpath
- 
+
         for filename in files:
             for x in range (RETRY_TIMES):
                 try:
@@ -146,7 +152,7 @@ def uploadWebSource (src_dir, ftpserver, ftpuser, ftppasswd):
                     if (not remote_filename in files) and (not remote_filename in dirs):
                         print 'Removing ' + remote_filename
                         ftpRemove (ftp, remote_filename)
-                        
+
                 ftp.close ()
 
                 break
